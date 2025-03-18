@@ -86,7 +86,7 @@ type AppendEntriesReply struct {
 }
 
 func (rf *Raft) genAppendEntriesArgs(prevLogIndex int) *AppendEntriesArgs {
-	entries := rf.getLogsInRange(prevLogIndex+1, rf.getLastLogIndex())
+	entries := rf.getLogsInRange(prevLogIndex+1, Min(rf.getLastLogIndex(), prevLogIndex+1+1000))
 	args := &AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,

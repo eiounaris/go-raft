@@ -70,8 +70,10 @@ func main() {
 				return
 			}
 			if input == "Test" { // 输入 Test 时测试 tps
-				// 调用 raft 服务
-				fmt.Println(service.Start(input))
+				for {
+					// 调用 raft 服务
+					fmt.Println(service.Start(input))
+				}
 			}
 			// 调用 raft 服务
 			fmt.Println(service.Start(input))
