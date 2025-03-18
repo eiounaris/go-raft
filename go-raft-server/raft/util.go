@@ -1,6 +1,10 @@
 package raft
 
 import (
+	"bytes"
+	"encoding/gob"
+	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -62,29 +66,91 @@ func (state NodeState) String() string {
 // --- LogEntry
 
 type LogEntry struct {
-	Command any
-	Term    int
 	Index   int
+	Term    int
+	Command any
 }
 
-func (rf *Raft) getLastLog() LogEntry {
-	return rf.logs[len(rf.logs)-1]
-}
-
-func (rf *Raft) getFirstLog() LogEntry {
-	return rf.logs[0]
-}
-
-// --- shrinkEntries
-
-func shrinkEntries(entries []LogEntry) []LogEntry {
-	const lenMultiple = 2
-	if cap(entries) > len(entries)*lenMultiple {
-		newEntries := make([]LogEntry, len(entries))
-		copy(newEntries, entries)
-		return newEntries
+func (rf *Raft) getLogByIndex(index int) *LogEntry {
+	key := fmt.Appendf(nil, "%v", index)
+	value, err := rf.logdb.Get(key)
+	if err != nil {
+		log.Fatalln(err)
 	}
-	return entries
+	var logentry LogEntry
+	r := bytes.NewBuffer(value)
+	d := gob.NewDecoder(r)
+	if err := d.Decode(&logentry); err != nil {
+		log.Fatalln(err)
+	}
+	return &logentry
+}
+
+func (rf *Raft) storeLogEntry(logentry *LogEntry) error {
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+	e.Encode(logentry)
+	err := rf.logdb.Set(fmt.Appendf(nil, "%v", logentry.Index), w.Bytes())
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (rf *Raft) deleteLogEntrysFromIndex(index int) error {
+	lastLogIndex := rf.getLastLogIndex()
+	for index <= lastLogIndex {
+		rf.logdb.Delete(fmt.Appendf(nil, "%v", index))
+		index++
+	}
+	return nil
+}
+
+func (rf *Raft) getLastLogIndex() int {
+	return rf.lastLogIndex
+}
+
+func (rf *Raft) getFirstLogIndex() int {
+	return rf.firstLogIndex
+}
+func (rf *Raft) getFirstLog() *LogEntry {
+	firstLogBytes, err := rf.logdb.Get(fmt.Appendf(nil, "%v", rf.getFirstLogIndex()))
+	if err != nil {
+		return nil
+	} else {
+		var firstLog LogEntry
+		r := bytes.NewBuffer(firstLogBytes)
+		d := gob.NewDecoder(r)
+
+		if err = d.Decode(&firstLog); err != nil {
+			log.Fatalln(err)
+		}
+		return &firstLog
+	}
+}
+
+func (rf *Raft) getLogsInRange(biginIndex, endIndex int) []LogEntry {
+	var logs []LogEntry
+	for index := biginIndex; index <= endIndex; index++ {
+		logs = append(logs, *rf.getLogByIndex(index))
+	}
+	return logs
+}
+
+func (rf *Raft) getLastLog() *LogEntry {
+	lastLogBytes, err := rf.logdb.Get([]byte(fmt.Sprintf("%v", rf.getLastLogIndex())))
+	if err != nil {
+		return nil
+	} else {
+		var lastLog LogEntry
+		r := bytes.NewBuffer(lastLogBytes)
+		d := gob.NewDecoder(r)
+
+		if err = d.Decode(&lastLog); err != nil {
+			log.Fatalln(err)
+		}
+		return &lastLog
+	}
 }
 
 // --- ApplyMsg
@@ -94,11 +160,10 @@ type ApplyMsg struct {
 	Command      any
 	CommandIndex int
 	CommandTerm  int
+}
 
-	SnapshotValid bool
-	Snapshot      []byte
-	SnapshotTerm  int
-	SnapshotIndex int
+func (applymsg ApplyMsg) String() string {
+	return fmt.Sprintf("{CommandValid:%v, Command:%v, CommandIndex:%v, CommandTerm:%v}", applymsg.CommandValid, applymsg.Command, applymsg.CommandIndex, applymsg.CommandTerm)
 }
 
 // --- util

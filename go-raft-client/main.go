@@ -34,7 +34,7 @@ func main() {
 	fmt.Println("1. Get <key>                    - 查询键值")
 	fmt.Println("2. Put <key> <value> <version>  - 设置键值")
 	fmt.Println("3. Exit                         - 退出程序")
-	fmt.Println("4. TPS                         - 测试TPS")
+	fmt.Println("4. Test                         - 测试 TPS")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		input := strings.TrimSpace(scanner.Text())

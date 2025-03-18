@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go-raft-server/peer"
@@ -20,23 +19,12 @@ type KVServer struct {
 	me      int
 	rf      *raft.Raft
 	applyCh chan raft.ApplyMsg
-	dead    int32 // set by Kill()
 
 	maxraftstate int // snapshot if log grows this big
 	lastApplied  int //record the last applied index to avoid duplicate apply
 
 	stateMachine KVStateMachine
 	notifyChs    map[int]chan *CommandReply
-}
-
-func (kv *KVServer) Kill() {
-	atomic.StoreInt32(&kv.dead, 1)
-	kv.rf.Kill()
-}
-
-func (kv *KVServer) killed() bool {
-	z := atomic.LoadInt32(&kv.dead)
-	return z == 1
 }
 
 func (kv *KVServer) ExecuteCommand(args *CommandArgs, reply *CommandReply) error {

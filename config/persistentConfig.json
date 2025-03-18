@@ -1,8 +1,0 @@
-[
-    {
-        "ElectionTimeout": 4000,
-        "HeartbeatTimeout": 2000,
-        "ExecuteTimeout": 1000,
-        "MaxRaftState": -1
-    }
-]

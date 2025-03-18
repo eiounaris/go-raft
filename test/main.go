@@ -16,127 +16,241 @@ package main
 
 // === github.com/dgraph-io/badger/v4
 
-// import (
-// 	"fmt"
-// 	"log"
+import (
+	"fmt"
+	"log"
 
-// 	"slices"
+	"slices"
 
-// 	badger "github.com/dgraph-io/badger/v4"
-// )
+	badger "github.com/dgraph-io/badger/v4"
+)
 
-// func main() {
-// 	// Open the Badger database located in the /tmp/badger directory.
-// 	// It will be created if it doesn't exist.
-// 	db, err := badger.Open(badger.DefaultOptions("data/logEntry"))
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+func main() {
+	// Open the Badger database located in the /tmp/badger directory.
+	// It will be created if it doesn't exist.
+	logdb, err := badger.Open(badger.DefaultOptions("data/logdb"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// 	defer db.Close()
+	defer logdb.Close()
 
-// 	// your code here
-// 	err = db.Update(func(txn *badger.Txn) error {
-// 		err := txn.Set([]byte("answer"), []byte("42"))
-// 		return err
-// 	})
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+	// Open the Badger database located in the /tmp/badger directory.
+	// It will be created if it doesn't exist.
+	kvdb, err := badger.Open(badger.DefaultOptions("data/kvdb"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-// 	err = db.View(func(txn *badger.Txn) error {
-// 		item, err := txn.Get([]byte("answer"))
-// 		if err != nil {
-// 			return err
-// 		}
+	defer kvdb.Close()
 
-// 		var valCopy []byte
-// 		// var valNot []byte
-// 		err = item.Value(func(val []byte) error {
-// 			// This func with val would only be called if item.Value encounters no error.
+	// your code here
+	err = logdb.Update(func(txn *badger.Txn) error {
+		err := txn.Set([]byte("logdb"), []byte("logdb"))
+		return err
+	})
+	if err != nil {
+		log.Println(err)
+	}
 
-// 			// Accessing val here is valid.
-// 			fmt.Printf("The answer is: %s\n", val)
+	err = logdb.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("logdb"))
+		if err != nil {
+			return err
+		}
 
-// 			// Copying or parsing val is valid.
-// 			valCopy = slices.Clone(val)
+		var valCopy []byte
+		// var valNot []byte
+		err = item.Value(func(val []byte) error {
+			// This func with val would only be called if item.Value encounters no error.
 
-// 			// Assigning val slice to another variable is NOT OK.
-// 			// valNot = val // Do not do this.
-// 			return nil
-// 		})
-// 		if err != nil {
-// 			return err
-// 		}
+			// Accessing val here is valid.
+			fmt.Printf("The logdb is: %s\n", val)
 
-// 		// DO NOT access val here. It is the most common cause of bugs.
-// 		// fmt.Printf("NEVER do this. %s\n", valNot)
+			// Copying or parsing val is valid.
+			valCopy = slices.Clone(val)
 
-// 		// You must copy it to use it outside item.Value(...).
-// 		fmt.Printf("The answer is: %s\n", valCopy)
+			// Assigning val slice to another variable is NOT OK.
+			// valNot = val // Do not do this.
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 
-// 		// Alternatively, you could also use item.ValueCopy().
-// 		valCopy, err = item.ValueCopy(nil)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		fmt.Printf("The answer is: %s\n", valCopy)
+		// DO NOT access val here. It is the most common cause of bugs.
+		// fmt.Printf("NEVER do this. %s\n", valNot)
 
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+		// You must copy it to use it outside item.Value(...).
+		fmt.Printf("The logdb is: %s\n", valCopy)
 
-// 	err = db.Update(func(txn *badger.Txn) error {
-// 		err := txn.Delete([]byte("answer"))
-// 		return err
-// 	})
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+		// Alternatively, you could also use item.ValueCopy().
+		valCopy, err = item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("The logdb is: %s\n", valCopy)
 
-// 	err = db.View(func(txn *badger.Txn) error {
-// 		item, err := txn.Get([]byte("answer"))
-// 		if err != nil {
-// 			return err
-// 		}
+		return nil
+	})
+	if err != nil {
+		log.Println(err)
+	}
 
-// 		var valCopy []byte
-// 		// var valNot []byte
-// 		err = item.Value(func(val []byte) error {
-// 			// This func with val would only be called if item.Value encounters no error.
+	err = logdb.Update(func(txn *badger.Txn) error {
+		err := txn.Delete([]byte("logdb"))
+		return err
+	})
+	if err != nil {
+		log.Println(err)
+	}
 
-// 			// Accessing val here is valid.
-// 			fmt.Printf("The answer is: %s\n", val)
+	err = logdb.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("logdb"))
+		if err != nil {
+			return err
+		}
 
-// 			// Copying or parsing val is valid.
-// 			valCopy = slices.Clone(val)
+		var valCopy []byte
+		// var valNot []byte
+		err = item.Value(func(val []byte) error {
+			// This func with val would only be called if item.Value encounters no error.
 
-// 			// Assigning val slice to another variable is NOT OK.
-// 			// valNot = val // Do not do this.
-// 			return nil
-// 		})
-// 		if err != nil {
-// 			return err
-// 		}
+			// Accessing val here is valid.
+			fmt.Printf("The logdb is: %s\n", val)
 
-// 		// DO NOT access val here. It is the most common cause of bugs.
-// 		// fmt.Printf("NEVER do this. %s\n", valNot)
+			// Copying or parsing val is valid.
+			valCopy = slices.Clone(val)
 
-// 		// You must copy it to use it outside item.Value(...).
-// 		fmt.Printf("The answer is: %s\n", valCopy)
+			// Assigning val slice to another variable is NOT OK.
+			// valNot = val // Do not do this.
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 
-// 		// Alternatively, you could also use item.ValueCopy().
-// 		valCopy, err = item.ValueCopy(nil)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		fmt.Printf("The answer is: %s\n", valCopy)
+		// DO NOT access val here. It is the most common cause of bugs.
+		// fmt.Printf("NEVER do this. %s\n", valNot)
 
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// }
+		// You must copy it to use it outside item.Value(...).
+		fmt.Printf("The logdb is: %s\n", valCopy)
+
+		// Alternatively, you could also use item.ValueCopy().
+		valCopy, err = item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("The logdb is: %s\n", valCopy)
+
+		return nil
+	})
+	if err != nil {
+		log.Println(err)
+	}
+
+	// your code here
+	err = kvdb.Update(func(txn *badger.Txn) error {
+		err := txn.Set([]byte("kvdb"), []byte("kvdb"))
+		return err
+	})
+	if err != nil {
+		log.Println(err)
+	}
+
+	err = kvdb.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("kvdb"))
+		if err != nil {
+			return err
+		}
+
+		var valCopy []byte
+		// var valNot []byte
+		err = item.Value(func(val []byte) error {
+			// This func with val would only be called if item.Value encounters no error.
+
+			// Accessing val here is valid.
+			fmt.Printf("The kvdb is: %s\n", val)
+
+			// Copying or parsing val is valid.
+			valCopy = slices.Clone(val)
+
+			// Assigning val slice to another variable is NOT OK.
+			// valNot = val // Do not do this.
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		// DO NOT access val here. It is the most common cause of bugs.
+		// fmt.Printf("NEVER do this. %s\n", valNot)
+
+		// You must copy it to use it outside item.Value(...).
+		fmt.Printf("The kvdb is: %s\n", valCopy)
+
+		// Alternatively, you could also use item.ValueCopy().
+		valCopy, err = item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("The kvdb is: %s\n", valCopy)
+
+		return nil
+	})
+	if err != nil {
+		log.Println(err)
+	}
+
+	err = kvdb.Update(func(txn *badger.Txn) error {
+		err := txn.Delete([]byte("kvdb"))
+		return err
+	})
+	if err != nil {
+		log.Println(err)
+	}
+
+	err = kvdb.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("kvdb"))
+		if err != nil {
+			return err
+		}
+
+		var valCopy []byte
+		// var valNot []byte
+		err = item.Value(func(val []byte) error {
+			// This func with val would only be called if item.Value encounters no error.
+
+			// Accessing val here is valid.
+			fmt.Printf("The kvdb is: %s\n", val)
+
+			// Copying or parsing val is valid.
+			valCopy = slices.Clone(val)
+
+			// Assigning val slice to another variable is NOT OK.
+			// valNot = val // Do not do this.
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		// DO NOT access val here. It is the most common cause of bugs.
+		// fmt.Printf("NEVER do this. %s\n", valNot)
+
+		// You must copy it to use it outside item.Value(...).
+		fmt.Printf("The kvdb is: %s\n", valCopy)
+
+		// Alternatively, you could also use item.ValueCopy().
+		valCopy, err = item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("The kvdb is: %s\n", valCopy)
+
+		return nil
+	})
+	if err != nil {
+		log.Println(err)
+	}
+}
