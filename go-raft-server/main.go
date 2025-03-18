@@ -35,7 +35,7 @@ func main() {
 	me := *flagMe
 
 	// 启动节点 Raft 服务
-	logdb, err := kvdb.MakeKVDB("data/logdb")
+	logdb, err := kvdb.MakeKVDB(fmt.Sprintf("data/logdb%v", me))
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -15,8 +15,8 @@ import (
 // const ElectionTimeout = 150
 // const HeartbeatTimeout = 10
 
-const ElectionTimeout = 10000
-const HeartbeatTimeout = 5000
+const ElectionTimeout = 2000
+const HeartbeatTimeout = 1000
 
 type LockedRand struct {
 	mu   sync.Mutex

@@ -194,6 +194,8 @@ func (rf *Raft) ticker() {
 			if rf.state == Leader {
 				// should send heartbeat
 				rf.BroadcastHeartbeat(true)
+				// should send heartbeat again
+				rf.heartbeatTimer.Reset(StableHeartbeatTimeout())
 			}
 			rf.mu.Unlock()
 		}
@@ -277,10 +279,12 @@ func (rf *Raft) replicateOnceRound(peer int) {
 					rf.nextIndex[peer] = reply.ConflictIndex
 				}
 			} else {
-				rf.matchIndex[peer] = args.PrevLogIndex + len(args.Entries)
-				rf.nextIndex[peer] = rf.matchIndex[peer] + 1
-				// advance commitIndex if possible
-				rf.advanceCommitIndexForLeader()
+				if len(args.Entries) != 0 {
+					rf.matchIndex[peer] = args.PrevLogIndex + len(args.Entries)
+					rf.nextIndex[peer] = rf.matchIndex[peer] + 1
+					// advance commitIndex if possible
+					rf.advanceCommitIndexForLeader()
+				}
 			}
 		}
 		rf.mu.Unlock()
