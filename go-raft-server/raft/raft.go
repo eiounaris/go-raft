@@ -1,10 +1,9 @@
 package raft
 
 import (
-	"bytes"
-	"encoding/gob"
 	"log"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -67,12 +66,14 @@ func Make(peers []peer.Peer, me int, logdb *kvdb.KVDB, applyCh chan ApplyMsg) *R
 	// initialize from state persisted before a crash
 	rf.readPersist()
 	if rf.lastLogIndex == 0 {
-		rf.storeLogEntry(&LogEntry{Index: 0, Term: 0})
+		if err := rf.storeLogEntry(&LogEntry{Index: 0, Term: 0}); err != nil {
+			log.Panicln(err)
+		}
 	}
 
 	// initialize nextIndex and matchIndex, and start replicator goroutine
 	for peer := range peers {
-		rf.matchIndex[peer], rf.nextIndex[peer] = 0, rf.getLastLogIndex()+1
+		rf.matchIndex[peer], rf.nextIndex[peer] = 0, rf.lastLogIndex+1
 		if peer != rf.me {
 			rf.replicatorCond[peer] = sync.NewCond(&sync.Mutex{})
 			// start replicator goroutine to send log entries to peer
@@ -118,7 +119,7 @@ func (rf *Raft) Start(command any) (int, int, bool) {
 	}
 
 	// first append log entry for itself
-	nextLogIndex := rf.getLastLogIndex() + 1
+	nextLogIndex := rf.lastLogIndex + 1
 	newLogEntry := LogEntry{
 		Index:   nextLogIndex,
 		Term:    rf.currentTerm,
@@ -159,7 +160,10 @@ func (rf *Raft) applier() {
 
 		// apply log entries to state machine
 		commitIndex, lastApplied := rf.commitIndex, rf.lastApplied
-		entries := rf.getLogsInRange(rf.lastApplied+1, rf.commitIndex)
+		entries, err := rf.getLogsInRange(rf.lastApplied+1, rf.commitIndex)
+		if err != nil {
+			log.Panicln(err)
+		}
 		rf.mu.Unlock()
 		// send the apply message to applyCh for service/State Machine Replica
 		for _, entry := range entries {
@@ -207,7 +211,10 @@ func (rf *Raft) ticker() {
 func (rf *Raft) StartElection() {
 	rf.votedFor = rf.me
 	rf.persist()
-	args := rf.genRequestVoteArgs()
+	args, err := rf.genRequestVoteArgs()
+	if err != nil {
+		log.Panicln(err)
+	}
 	grantedVotes := 1
 	util.DPrintf("{Node %v} starts election with RequestVoteArgs %v", rf.me, args)
 	for peer := range rf.peers {
@@ -263,7 +270,10 @@ func (rf *Raft) replicateOnceRound(peer int) {
 	}
 	prevLogIndex := rf.nextIndex[peer] - 1
 
-	args := rf.genAppendEntriesArgs(prevLogIndex)
+	args, err := rf.genAppendEntriesArgs(prevLogIndex)
+	if err != nil {
+		log.Panicln(err)
+	}
 	rf.mu.RUnlock()
 	reply := new(AppendEntriesReply)
 	if rf.sendAppendEntries(peer, args, reply) {
@@ -307,7 +317,7 @@ func (rf *Raft) ChangeState(state NodeState) {
 	case Leader:
 		rf.electionTimer.Stop() // stop election
 		rf.heartbeatTimer.Reset(StableHeartbeatTimeout())
-		lastLogIndex := rf.getLastLogIndex()
+		lastLogIndex := rf.lastLogIndex
 		for peer := range rf.peers {
 			if peer != rf.me {
 				rf.matchIndex[peer], rf.nextIndex[peer] = 0, lastLogIndex+1
@@ -320,105 +330,85 @@ func (rf *Raft) ChangeState(state NodeState) {
 }
 
 func (rf *Raft) persist() {
-	w := new(bytes.Buffer)
-	e := gob.NewEncoder(w)
-	e.Encode(rf.currentTerm)
-	if err := rf.logdb.Set([]byte("currentTerm"), w.Bytes()); err != nil {
-		log.Fatalln(err)
+	bytes := []byte(strconv.Itoa(rf.currentTerm))
+	if err := rf.logdb.Set([]byte("currentTerm"), bytes); err != nil {
+		log.Panicln(err)
 	}
-	w = new(bytes.Buffer)
-	e = gob.NewEncoder(w)
-	e.Encode(rf.votedFor)
-	if err := rf.logdb.Set([]byte("votedFor"), w.Bytes()); err != nil {
-		log.Fatalln(err)
+	bytes = []byte(strconv.Itoa(rf.votedFor))
+	if err := rf.logdb.Set([]byte("votedFor"), bytes); err != nil {
+		log.Panicln(err)
 	}
-	w = new(bytes.Buffer)
-	e = gob.NewEncoder(w)
-	e.Encode(rf.firstLogIndex)
-	if err := rf.logdb.Set([]byte("firstLogIndex"), w.Bytes()); err != nil {
-		log.Fatalln(err)
+	bytes = []byte(strconv.Itoa(rf.firstLogIndex))
+	if err := rf.logdb.Set([]byte("firstLogIndex"), bytes); err != nil {
+		log.Panicln(err)
 	}
-	w = new(bytes.Buffer)
-	e = gob.NewEncoder(w)
-	e.Encode(rf.lastLogIndex)
-	if err := rf.logdb.Set([]byte("lastLogIndex"), w.Bytes()); err != nil {
-		log.Fatalln(err)
+	bytes = []byte(strconv.Itoa(rf.lastLogIndex))
+	if err := rf.logdb.Set([]byte("lastLogIndex"), bytes); err != nil {
+		log.Panicln(err)
 	}
-	w = new(bytes.Buffer)
-	e = gob.NewEncoder(w)
-	e.Encode(rf.commitIndex)
-	if err := rf.logdb.Set([]byte("commitIndex"), w.Bytes()); err != nil {
-		log.Fatalln(err)
+	bytes = []byte(strconv.Itoa(rf.commitIndex))
+	if err := rf.logdb.Set([]byte("commitIndex"), bytes); err != nil {
+		log.Panicln(err)
 	}
-	w = new(bytes.Buffer)
-	e = gob.NewEncoder(w)
-	e.Encode(rf.lastApplied)
-	if err := rf.logdb.Set([]byte("lastApplied"), w.Bytes()); err != nil {
-		log.Fatalln(err)
+	bytes = []byte(strconv.Itoa(rf.lastApplied))
+	if err := rf.logdb.Set([]byte("lastApplied"), bytes); err != nil {
+		log.Panicln(err)
 	}
-
 }
 
 // restore previously persisted state.
 func (rf *Raft) readPersist() {
-	currentTermBytes, err := rf.logdb.Get([]byte("currentTerm"))
-	if err == nil {
-		r := bytes.NewBuffer(currentTermBytes)
-		d := gob.NewDecoder(r)
-		if err = d.Decode(&rf.currentTerm); err != nil {
-			log.Fatalln(err)
+	if currentTermBytes, err := rf.logdb.Get([]byte("currentTerm")); err == nil {
+		s := string(currentTermBytes)
+		rf.currentTerm, err = strconv.Atoi(s)
+		if err != nil {
+			log.Panicln(err)
 		}
 	}
-	votedForBytes, err := rf.logdb.Get([]byte("votedFor"))
-	if err == nil {
-		r := bytes.NewBuffer(votedForBytes)
-		d := gob.NewDecoder(r)
-		if err = d.Decode(&rf.votedFor); err != nil {
-			log.Fatalln(err)
+	if votedForBytes, err := rf.logdb.Get([]byte("votedFor")); err == nil {
+		s := string(votedForBytes)
+		rf.votedFor, err = strconv.Atoi(s)
+		if err != nil {
+			log.Panicln(err)
 		}
 	}
-	firstLogIndexBytes, err := rf.logdb.Get([]byte("firstLogIndex"))
-	if err == nil {
-		r := bytes.NewBuffer(firstLogIndexBytes)
-		d := gob.NewDecoder(r)
-		if err = d.Decode(&rf.firstLogIndex); err != nil {
-			log.Fatalln(err)
+	if lastLogIndexBytes, err := rf.logdb.Get([]byte("lastLogIndex")); err == nil {
+		s := string(lastLogIndexBytes)
+		rf.lastLogIndex, err = strconv.Atoi(s)
+		if err != nil {
+			log.Panicln(err)
 		}
 	}
-	lastLogIndexBytes, err := rf.logdb.Get([]byte("lastLogIndex"))
-	if err == nil {
-		r := bytes.NewBuffer(lastLogIndexBytes)
-		d := gob.NewDecoder(r)
-		if err = d.Decode(&rf.lastLogIndex); err != nil {
-			log.Fatalln(err)
+	if commitIndexBytes, err := rf.logdb.Get([]byte("commitIndex")); err == nil {
+		s := string(commitIndexBytes)
+		rf.commitIndex, err = strconv.Atoi(s)
+		if err != nil {
+			log.Panicln(err)
 		}
 	}
-	commitIndexBytes, err := rf.logdb.Get([]byte("commitIndex"))
-	if err == nil {
-		r := bytes.NewBuffer(commitIndexBytes)
-		d := gob.NewDecoder(r)
-		if err = d.Decode(&rf.commitIndex); err != nil {
-			log.Fatalln(err)
+	if lastAppliedBytes, err := rf.logdb.Get([]byte("lastApplied")); err == nil {
+		s := string(lastAppliedBytes)
+		rf.lastApplied, err = strconv.Atoi(s)
+		if err != nil {
+			log.Panicln(err)
 		}
 	}
-	lastAppliedBytes, err := rf.logdb.Get([]byte("lastApplied"))
-	if err == nil {
-		r := bytes.NewBuffer(lastAppliedBytes)
-		d := gob.NewDecoder(r)
-		if err = d.Decode(&rf.lastApplied); err != nil {
-			log.Fatalln(err)
-		}
-	}
-	rf.persist()
 }
 
 func (rf *Raft) isLogUpToDate(index, term int) bool {
-	lastLog := rf.getLastLog()
+	lastLog, err := rf.getLastLog()
+	if err != nil {
+		log.Panicln(err)
+	}
 	return term > lastLog.Term || (term == lastLog.Term && index >= lastLog.Index)
 }
 
 func (rf *Raft) isLogMatched(index, term int) bool {
-	return index <= rf.getLastLogIndex() && term == rf.getLogByIndex(index).Term
+	indexLog, err := rf.getLogByIndex(index)
+	if err != nil {
+		log.Panicln(err)
+	}
+	return index <= rf.lastLogIndex && term == indexLog.Term
 }
 
 func (rf *Raft) advanceCommitIndexForLeader() {
@@ -442,5 +432,5 @@ func (rf *Raft) needReplicating(peer int) bool {
 	rf.mu.RLock()
 	defer rf.mu.RUnlock()
 	// check the logs of peer is behind the leader
-	return rf.state == Leader && rf.matchIndex[peer] < rf.getLastLogIndex()
+	return rf.state == Leader && rf.matchIndex[peer] < rf.lastLogIndex
 }

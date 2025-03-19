@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -71,85 +72,62 @@ type LogEntry struct {
 	Command any
 }
 
-func (rf *Raft) getLogByIndex(index int) *LogEntry {
-	key := fmt.Appendf(nil, "%v", index)
-	value, err := rf.logdb.Get(key)
+func (rf *Raft) getLogByIndex(index int) (*LogEntry, error) {
+	indexLogBytes, err := rf.logdb.Get([]byte(strconv.Itoa(index)))
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
-	var logentry LogEntry
-	r := bytes.NewBuffer(value)
+	var indexLog LogEntry
+	r := bytes.NewBuffer(indexLogBytes)
 	d := gob.NewDecoder(r)
-	if err := d.Decode(&logentry); err != nil {
-		log.Fatalln(err)
+	if err := d.Decode(&indexLog); err != nil {
+		return nil, err
 	}
-	return &logentry
+	return &indexLog, nil
 }
 
 func (rf *Raft) storeLogEntry(logentry *LogEntry) error {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
-	e.Encode(logentry)
-	err := rf.logdb.Set(fmt.Appendf(nil, "%v", logentry.Index), w.Bytes())
+	err := e.Encode(logentry)
+	if err != nil {
+		log.Panicln(err)
+	}
+	err = rf.logdb.Set([]byte(strconv.Itoa(logentry.Index)), w.Bytes())
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rf *Raft) deleteLogEntrysFromIndex(index int) error {
-	lastLogIndex := rf.getLastLogIndex()
-	for index <= lastLogIndex {
-		rf.logdb.Delete(fmt.Appendf(nil, "%v", index))
-		index++
-	}
-	return nil
-}
-
-func (rf *Raft) getLastLogIndex() int {
-	return rf.lastLogIndex
-}
-
-func (rf *Raft) getFirstLogIndex() int {
-	return rf.firstLogIndex
-}
-func (rf *Raft) getFirstLog() *LogEntry {
-	firstLogBytes, err := rf.logdb.Get(fmt.Appendf(nil, "%v", rf.getFirstLogIndex()))
-	if err != nil {
-		return nil
-	} else {
-		var firstLog LogEntry
-		r := bytes.NewBuffer(firstLogBytes)
-		d := gob.NewDecoder(r)
-
-		if err = d.Decode(&firstLog); err != nil {
-			log.Fatalln(err)
-		}
-		return &firstLog
-	}
-}
-
-func (rf *Raft) getLogsInRange(biginIndex, endIndex int) []LogEntry {
+func (rf *Raft) getLogsInRange(fromIndex, toIndex int) ([]LogEntry, error) {
 	var logs []LogEntry
-	for index := biginIndex; index <= endIndex; index++ {
-		logs = append(logs, *rf.getLogByIndex(index))
+	if toIndex < fromIndex {
+		return logs, nil
 	}
-	return logs
+	logs = make([]LogEntry, 0, toIndex-fromIndex+1)
+	for index := fromIndex; index <= toIndex; index++ {
+		log, err := rf.getLogByIndex(index)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, *log)
+	}
+	return logs, nil
 }
 
-func (rf *Raft) getLastLog() *LogEntry {
-	lastLogBytes, err := rf.logdb.Get([]byte(fmt.Sprintf("%v", rf.getLastLogIndex())))
+func (rf *Raft) getLastLog() (*LogEntry, error) {
+	lastLogBytes, err := rf.logdb.Get([]byte(strconv.Itoa(rf.lastLogIndex)))
 	if err != nil {
-		return nil
+		return nil, err
 	} else {
 		var lastLog LogEntry
 		r := bytes.NewBuffer(lastLogBytes)
 		d := gob.NewDecoder(r)
-
 		if err = d.Decode(&lastLog); err != nil {
-			log.Fatalln(err)
+			return nil, err
 		}
-		return &lastLog
+		return &lastLog, nil
 	}
 }
 
@@ -163,7 +141,8 @@ type ApplyMsg struct {
 }
 
 func (applymsg ApplyMsg) String() string {
-	return fmt.Sprintf("{CommandValid:%v, Command:%v, CommandIndex:%v, CommandTerm:%v}", applymsg.CommandValid, applymsg.Command, applymsg.CommandIndex, applymsg.CommandTerm)
+	return fmt.Sprintf("{CommandValid:%v, Command:%v, CommandIndex:%v, CommandTerm:%v}",
+		applymsg.CommandValid, applymsg.Command, applymsg.CommandIndex, applymsg.CommandTerm)
 }
 
 // --- util

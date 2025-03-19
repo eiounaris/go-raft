@@ -2,12 +2,14 @@ package main
 
 import (
 	"bufio"
+	"encoding/gob"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 
 	"go-raft-server/kvdb"
+	"go-raft-server/kvraft"
 	"go-raft-server/peer"
 	"go-raft-server/raft"
 	"go-raft-server/util"
@@ -42,9 +44,10 @@ func main() {
 	applyCh := make(chan raft.ApplyMsg)
 	go func() {
 		for msg := range applyCh {
-			fmt.Println(msg)
+			fmt.Printf("收到 Raft ApplyMsg 回复：%v\n", msg)
 		}
 	}()
+	gob.Register([]kvraft.Command{})
 	service := raft.Make(peers, me, logdb, applyCh)
 
 	// 启动 rpc 服务
@@ -65,14 +68,25 @@ func main() {
 			if input == "" {
 				continue
 			}
-			if input == "Exit" { // 输入 Exit 时退出
+			if input == "exit" { // 输入 Exit 时退出
 				inputCh <- input
 				return
 			}
-			if input == "Test" { // 输入 Test 时测试 tps
+			blockOfCommands := make([]kvraft.Command, 100)
+			for index := range blockOfCommands {
+				blockOfCommands[index].CommandArgs = &kvraft.CommandArgs{Key: "key", Value: "", Version: 0, Op: kvraft.OpGet}
+			}
+			blockOfInputs := make([]int, 100)
+			if input == "test Command" { // 输入 Test 时测试 tps
 				for {
 					// 调用 raft 服务
-					fmt.Println(service.Start(input))
+					fmt.Println(service.Start(blockOfCommands))
+				}
+			}
+			if input == "test string" { // 输入 Test 时测试 tps
+				for {
+					// 调用 raft 服务
+					fmt.Println(service.Start(blockOfInputs))
 				}
 			}
 			// 调用 raft 服务

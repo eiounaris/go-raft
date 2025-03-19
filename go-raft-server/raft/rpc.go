@@ -20,15 +20,18 @@ type RequestVoteReply struct {
 	VoteGranted bool
 }
 
-func (rf *Raft) genRequestVoteArgs() *RequestVoteArgs {
-	lastLog := rf.getLastLog()
+func (rf *Raft) genRequestVoteArgs() (*RequestVoteArgs, error) {
+	lastLog, err := rf.getLastLog()
+	if err != nil {
+		return nil, err
+	}
 	args := &RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
 		LastLogIndex: lastLog.Index,
 		LastLogTerm:  lastLog.Term,
 	}
-	return args
+	return args, nil
 }
 
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) error {
@@ -85,17 +88,24 @@ type AppendEntriesReply struct {
 	ConflictTerm  int
 }
 
-func (rf *Raft) genAppendEntriesArgs(prevLogIndex int) *AppendEntriesArgs {
-	entries := rf.getLogsInRange(prevLogIndex+1, Min(rf.getLastLogIndex(), prevLogIndex+1+1000))
+func (rf *Raft) genAppendEntriesArgs(prevLogIndex int) (*AppendEntriesArgs, error) {
+	entries, err := rf.getLogsInRange(prevLogIndex+1, Min(rf.lastLogIndex, prevLogIndex+1+1000))
+	if err != nil {
+		return nil, err
+	}
+	prevLog, err := rf.getLogByIndex(prevLogIndex)
+	if err != nil {
+		return nil, err
+	}
 	args := &AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,
 		PrevLogIndex: prevLogIndex,
-		PrevLogTerm:  rf.getLogByIndex(prevLogIndex).Term,
+		PrevLogTerm:  prevLog.Term,
 		LeaderCommit: rf.commitIndex,
 		Entries:      entries,
 	}
-	return args
+	return args, nil
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) error {
@@ -121,7 +131,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it(§5.3)
 	if !rf.isLogMatched(args.PrevLogIndex, args.PrevLogTerm) {
 		reply.Term, reply.Success = rf.currentTerm, false
-		lastLog := rf.getLastLog()
+		lastLog, err := rf.getLastLog()
+		if err != nil {
+			return err
+		}
 		// find the first index of the conflicting term
 		if lastLog.Index < args.PrevLogIndex {
 			// the last log index is smaller than the prevLogIndex, then the conflict index is the last log index
@@ -129,7 +142,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		} else {
 			// find the first index of the conflicting term
 			index := args.PrevLogIndex
-			for index >= rf.commitIndex+1 && rf.getLogByIndex(index).Term == lastLog.Term {
+			indexLog, err := rf.getLogByIndex(index)
+			if err != nil {
+				return err
+			}
+			for index >= rf.commitIndex+1 && indexLog.Term == lastLog.Term {
 				index--
 			}
 			reply.ConflictIndex, reply.ConflictTerm = index+1, args.PrevLogTerm
@@ -145,7 +162,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.persist()
 
 	// If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry) (paper)
-	newCommitIndex := Min(args.LeaderCommit, rf.getLastLogIndex())
+	newCommitIndex := Min(args.LeaderCommit, rf.lastLogIndex)
 	if newCommitIndex > rf.commitIndex {
 		util.DPrintf("{Node %v} advances commitIndex from %v to %v with leaderCommit %v in term %v", rf.me, rf.commitIndex, newCommitIndex, args.LeaderCommit, rf.currentTerm)
 		rf.commitIndex = newCommitIndex
